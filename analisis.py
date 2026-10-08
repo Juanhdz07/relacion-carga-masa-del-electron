@@ -284,7 +284,7 @@ for r, I_r in RADIOS.items():
     ax.set_ylim(0, None)
     ax.set_title(f"Voltaje vs B², r = {rcm} cm")
     ax.legend(loc="lower right", fontsize=9)
-    caja(ax, texto_err.rstrip("\n").replace(".", ","))
+    caja(ax, (texto_err + "  B²: ±2B·σ_B (propagada)").replace(".", ","))
     res = Vr - s * B2
     s_eff = np.sqrt(SIGMA_V**2 + (s * sB2) ** 2)
     axr.axhline(0, color="k", lw=1)
