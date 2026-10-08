@@ -16,8 +16,9 @@ Los datos están en `datos.py`. Las figuras quedan en `figuras/` y las tablas/re
 1. **Caracterización de la bobina**: regresión lineal `B = m I + b` con los datos de campo (ya corregidos por el campo ambiental `B_amb = (0,04 ± 0,01) mT`).
 2. **Campo para cada punto**: `B = m I + b`, con incertidumbre propagada
    `σ_B² = I² σ_m² + σ_b² + 2 I cov(m,b) + m² σ_I²` y `σ_{B²} = 2 B σ_B`.
-3. **Para cada radio**: regresión `V = s B² + c` (gráficas V vs B² y V vs I con la curva `V = s (m I + b)² + c`).
-4. **Relación carga/masa**: `e/m = 2 s / r²`, con `σ_{e/m}² = (2 σ_s / r²)² + (4 s σ_r / r³)²`.
+3. **Para cada radio**: regresión por el origen `V = m' B²` (gráficas V vs B² y V vs I con la curva `V = m' (m I + b)²`).
+4. **Relación carga/masa**: `e/m = 2 m' / r²`, con `σ_{e/m}² = (2 σ_{m'} / r²)² + (4 m' σ_r / r³)²`.
+5. **Promedio**: promedio ponderado con pesos `w_i = 1/σ_i²` e incertidumbre `σ = 1/√(Σ w_i)` (no la desviación estándar). Tabla en `resultados/tabla_resumen_em.tex`.
 
 Las regresiones usan mínimos cuadrados ponderados con varianza efectiva
 (`σ_ef² = σ_y² + (a σ_x)²`) para considerar las incertidumbres en ambos ejes.

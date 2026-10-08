@@ -3,7 +3,8 @@
 Genera:
   figuras/B_vs_I.png              caracterización de la bobina (B = m I + b)
   figuras/V_vs_I_r{r}cm.png       V vs I para cada radio + curva del ajuste
-  figuras/V_vs_B2_r{r}cm.png      V vs B^2 para cada radio (e/m = 2 s / r^2)
+  figuras/V_vs_B2_r{r}cm.png      V vs B^2 para cada radio, V = m' B^2
+                                  (e/m = 2 m' / r^2)
   figuras/e_m_por_radio.png       comparación de e/m para cada radio
   resultados/*.csv, *.tex         tablas con B calculado y su incertidumbre
 """
@@ -102,6 +103,28 @@ def ajuste_lineal(x, y, sx, sy):
     return a, c, cov * max(chi2_red, 1.0), chi2_red, nu
 
 
+def ajuste_origen(x, y, sx, sy):
+    """Regresión ponderada por el origen y = a x con errores en x e y.
+
+    Igual que `ajuste_lineal` (varianza efectiva), pero sin intercepto.
+    """
+    x, y = np.asarray(x, float), np.asarray(y, float)
+    sx = np.broadcast_to(sx, x.shape)
+    sy = np.broadcast_to(sy, y.shape)
+    a = np.sum(x * y) / np.sum(x * x)
+    for _ in range(50):
+        w = 1 / (sy**2 + (a * sx) ** 2)
+        a_n = np.sum(w * x * y) / np.sum(w * x * x)
+        if np.isclose(a_n, a, rtol=1e-12):
+            a = a_n
+            break
+        a = a_n
+    nu = len(x) - 1
+    chi2_red = np.sum(w * (y - a * x) ** 2) / nu
+    sa = np.sqrt(max(chi2_red, 1.0) / np.sum(w * x * x))
+    return a, sa, chi2_red, nu
+
+
 def caja(ax, texto, loc="upper left"):
     pos = {"upper left": (0.03, 0.97, "left", "top"),
            "lower left": (0.03, 0.04, "left", "bottom"),
@@ -185,18 +208,17 @@ for r, I_r in RADIOS.items():
     B, sB = campo(Ir)                  # mT
     B2, sB2 = B**2, 2 * B * sB         # mT²
 
-    # V = s B² + c   (B en mT, s en V/mT²)
-    s, c, cov_sc, chi2, nu = ajuste_lineal(
+    # V = m' B²  (por el origen; B² en mT² = 10⁻⁶ T², s en V/mT²)
+    s, ss, chi2, nu = ajuste_origen(
         B2[usar_v], Vr[usar_v], sB2[usar_v], np.full(usar_v.sum(), SIGMA_V))
-    ss, sc = np.sqrt(np.diag(cov_sc))
-    r2 = np.corrcoef(B2[usar_v], Vr[usar_v])[0, 1] ** 2
 
-    # e/m = 2 s / r²  (s pasado a V/T²)
+    # e/m = 2 m' / r²  con m' en V/T²
     s_T = s * 1e6
     ss_T = ss * 1e6
     em = 2 * s_T / r**2
     sem = np.sqrt((2 / r**2 * ss_T) ** 2 + (4 * s_T / r**3 * SIGMA_R) ** 2)
-    resumen.append((r, s, ss, c, sc, chi2, r2, em, sem))
+    resumen.append((r, s_T, ss_T, chi2, em, sem))
+    mp_txt = fmt_sci(s_T, ss_T)[0]
 
     for vi, ii, bi, sbi, b2i, sb2i, u in zip(Vr, Ir, B, sB, B2, sB2, usar_v):
         csv_filas.append(f"{r},{vi:g},{SIGMA_V:g},{ii:g},{SIGMA_I:g},"
@@ -227,17 +249,16 @@ for r, I_r in RADIOS.items():
                     elinewidth=1, capsize=3, label="Excluidos del ajuste")
     imin = max(0.0, Ir.min() - 0.1)
     xx = np.linspace(imin, Ir.max() + 0.05, 200)
-    ax.plot(xx, s * (m * xx + b) ** 2 + c, "-", color="k", lw=1.3,
-            label="Ajuste: V = s (m I + b)² + c")
+    ax.plot(xx, s * (m * xx + b) ** 2, "-", color="k", lw=1.3,
+            label="Ajuste: V = m' (m I + b)²")
     ax.set_ylabel("V (V)")
     ax.set_title(f"Voltaje vs corriente, r = {rcm} cm")
     ax.legend(loc="lower right", fontsize=9)
     caja(ax,
          (texto_err + f"  I: ±{SIGMA_I:g} A (instrumental)\n"
-          f"s = {fmt_pm(s, ss)} V/mT²\n"
-          f"c = {fmt_pm(c, sc)} V\n"
+          f"m' = {mp_txt} V/T²\n"
           f"e/m = {em_txt} C/kg").replace(".", ","))
-    res = Vr - (s * (m * Ir + b) ** 2 + c)
+    res = Vr - s * (m * Ir + b) ** 2
     s_eff = np.sqrt(SIGMA_V**2 + (2 * s * (m * Ir + b) * m * SIGMA_I) ** 2)
     axr.axhline(0, color="k", lw=1)
     axr.errorbar(Ir[usar_v], res[usar_v], yerr=s_eff[usar_v], fmt="o", ms=5,
@@ -258,23 +279,24 @@ for r, I_r in RADIOS.items():
     ax.errorbar(B2[usar_v], Vr[usar_v], xerr=sB2[usar_v], yerr=SIGMA_V,
                 fmt="o", ms=5, color=col, mec="k", ecolor="k", elinewidth=1,
                 capsize=3, label="Datos experimentales")
-    xx = np.linspace(B2[usar_v].min() * 0.9, B2[usar_v].max() * 1.05, 100)
-    ax.plot(xx, s * xx + c, "-", color="k", lw=1.3,
-            label="Ajuste lineal: V = s B² + c")
+    xx = np.linspace(0, B2[usar_v].max() * 1.05, 100)
+    ax.plot(xx, s * xx, "-", color="k", lw=1.3,
+            label="Ajuste lineal: V = m' B²")
     ax.set_ylabel("V (V)")
+    ax.set_xlim(0, None)
+    ax.set_ylim(0, None)
     ax.set_title(f"Voltaje vs B², r = {rcm} cm")
     ax.legend(loc="lower right", fontsize=9)
     caja(ax,
          (texto_err + "  B²: 2B·σ_B (propagada desde B = m I + b)\n"
-          f"s = {fmt_pm(s, ss)} V/mT²\n"
-          f"c = {fmt_pm(c, sc)} V\n"
-          f"e/m = 2s/r² = {em_txt} C/kg").replace(".", ","))
-    res = Vr - (s * B2 + c)
+          f"m' = {mp_txt} V/T²\n"
+          f"e/m = 2m'/r² = {em_txt} C/kg").replace(".", ","))
+    res = Vr - s * B2
     s_eff = np.sqrt(SIGMA_V**2 + (s * sB2) ** 2)
     axr.axhline(0, color="k", lw=1)
     axr.errorbar(B2[usar_v], res[usar_v], yerr=s_eff[usar_v], fmt="o", ms=5,
                  color=col, mec="k", ecolor="k", elinewidth=1, capsize=3)
-    axr.set_xlabel("B² (mT²)")
+    axr.set_xlabel("B² (×10⁻⁶ T²)")
     axr.set_ylabel("Residuales (V)")
     lim = 1.3 * np.max(np.abs(res[usar_v]) + s_eff[usar_v])
     axr.set_ylim(-lim, lim)
@@ -287,8 +309,8 @@ for r, I_r in RADIOS.items():
 # 3. e/m por radio y promedio ponderado
 # --------------------------------------------------------------------------
 radios = np.array([x[0] for x in resumen])
-ems = np.array([x[7] for x in resumen])
-sems = np.array([x[8] for x in resumen])
+ems = np.array([x[4] for x in resumen])
+sems = np.array([x[5] for x in resumen])
 w = 1 / sems**2
 em_prom = np.sum(w * ems) / np.sum(w)
 sem_prom = 1 / np.sqrt(np.sum(w))
@@ -308,11 +330,12 @@ ax.set_xlabel("Radio r (cm)")
 ax.set_ylabel("e/m (×10¹¹ C/kg)")
 ax.set_xticks(radios * 100)
 ax.set_xlim(1, 9)
-ax.set_ylim(0, 2.2)
+ax.set_ylim(0, 2.6)
 ax.set_title("Relación carga/masa obtenida para cada radio")
 ax.legend(fontsize=9, loc="upper right")
 caja(ax, "Barras de error: incertidumbre de e/m propagada\n"
-         "desde la pendiente s del ajuste V vs B²", loc="lower left")
+         "desde la pendiente m' del ajuste V vs B²\n"
+         "Promedio ponderado: pesos w = 1/σ²", loc="lower left")
 con_coma(ax)
 fig.savefig(FIG / "e_m_por_radio.png")
 plt.close(fig)
@@ -333,7 +356,7 @@ tex = [
     "\\label{tab:campo}",
     "\\begin{tabular}{ccccc}",
     "\\toprule",
-    "$r$ (cm) & $V$ (V) & $I$ (A) & $B$ (mT) & $B^2$ (mT$^2$) \\\\",
+    "$r$ (cm) & $V$ (V) & $I$ (A) & $B$ (mT) & $B^2$ ($10^{-6}$ T$^2$) \\\\",
     "\\midrule",
     *tex_filas[:-1],
     "\\bottomrule",
@@ -342,6 +365,40 @@ tex = [
 ]
 (RES / "tabla_campo.tex").write_text("\n".join(tex) + "\n")
 
+
+def tex_sci(valor, error):
+    _, (v, e, exp) = fmt_sci(valor, error)
+    return f"$({v} \\pm {e})\\times 10^{{{exp}}}$"
+
+
+filas_res = []
+for r, s_T, ss_T, chi2, em, sem in resumen:
+    err = abs(em - E_M_TEORICO) / E_M_TEORICO * 100
+    filas_res.append(f"{r * 100:.0f} & {tex_sci(s_T, ss_T)} & "
+                     f"{tex_sci(em, sem)} & {err:.1f} \\\\".replace(".", ","))
+tex_res = [
+    "\\begin{table}[H]",
+    "\\centering",
+    "\\caption{Pendiente $m'$ del ajuste $V = m'B^2$ y relación carga/masa "
+    "$e/m_e = 2m'/r^2$ para cada radio. El promedio se reporta como promedio "
+    "ponderado con pesos $w_i = 1/\\sigma_i^2$ y su incertidumbre como "
+    "$\\sigma = 1/\\sqrt{\\sum_i w_i}$. Valor teórico: "
+    "$1,7588\\times 10^{11}$ C/kg.}",
+    "\\label{tab:resumen_em}",
+    "\\begin{tabular}{cccc}",
+    "\\toprule",
+    "$r$ (cm) & $m'$ (V/T$^2$) & $e/m_e$ (C/kg) & Error (\\%) \\\\",
+    "\\midrule",
+    *filas_res,
+    "\\midrule",
+    f"\\multicolumn{{2}}{{c}}{{Promedio ponderado}} & "
+    f"{tex_sci(em_prom, sem_prom)} & {err_rel:.1f} \\\\".replace(".", ","),
+    "\\bottomrule",
+    "\\end{tabular}",
+    "\\end{table}",
+]
+(RES / "tabla_resumen_em.tex").write_text("\n".join(tex_res) + "\n")
+
 lineas = [
     "CARACTERIZACIÓN DE LA BOBINA  (B = m I + b)",
     f"  m = {fmt_pm(m, sm)} mT/A",
@@ -349,14 +406,14 @@ lineas = [
     f"  cov(m,b) = {cov_mb[0, 1]:.3e} mT²/A",
     f"  R² = {r2_cal:.5f}   chi²_red = {chi2_cal:.3f}",
     "",
-    "AJUSTES V = s B² + c   ->   e/m = 2 s / r²",
+    "AJUSTES V = m' B²  (por el origen)   ->   e/m = 2 m' / r²",
 ]
-for r, s, ss, c, sc, chi2, r2, em, sem in resumen:
+for r, s_T, ss_T, chi2, em, sem in resumen:
+    err = abs(em - E_M_TEORICO) / E_M_TEORICO * 100
     lineas += [
         f"  r = {r * 100:.0f} cm:",
-        f"    s = {fmt_pm(s, ss)} V/mT²   c = {fmt_pm(c, sc)} V",
-        f"    R² = {r2:.4f}   chi²_red = {chi2:.2f}",
-        f"    e/m = {fmt_sci(em, sem)[0]} C/kg",
+        f"    m' = {fmt_sci(s_T, ss_T)[0]} V/T²   chi²_red = {chi2:.2f}",
+        f"    e/m = {fmt_sci(em, sem)[0]} C/kg   error = {err:.1f} %",
     ]
 lineas += [
     "",
