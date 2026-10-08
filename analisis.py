@@ -147,8 +147,7 @@ ax.set_ylim(0, None)
 ax.legend(loc="lower right", fontsize=9)
 caja(ax,
      "Barras de error (incertidumbre instrumental):\n"
-     f"  B: ±{SIGMA_B:g} mT    I: ±{SIGMA_I:g} A".replace(".", ",") +
-     f"\nR² = {r2_cal:.5f}   χ²ᵣ = {chi2_cal:.2f}".replace(".", ","))
+     f"  B: ±{SIGMA_B:g} mT    I: ±{SIGMA_I:g} A".replace(".", ","))
 ax.set_title("Caracterización de la bobina: B vs I")
 
 res = B_CAL - (m * I_CAL + b)
@@ -269,7 +268,6 @@ for r, I_r in RADIOS.items():
          (texto_err + "  B²: 2B·σ_B (propagada desde B = m I + b)\n"
           f"s = {fmt_pm(s, ss)} V/mT²\n"
           f"c = {fmt_pm(c, sc)} V\n"
-          f"R² = {r2:.4f}   χ²ᵣ = {chi2:.2f}\n"
           f"e/m = 2s/r² = {em_txt} C/kg").replace(".", ","))
     res = Vr - (s * B2 + c)
     s_eff = np.sqrt(SIGMA_V**2 + (s * sB2) ** 2)
