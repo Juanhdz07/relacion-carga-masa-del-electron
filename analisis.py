@@ -218,7 +218,6 @@ for r, I_r in RADIOS.items():
     em = 2 * s_T / r**2
     sem = np.sqrt((2 / r**2 * ss_T) ** 2 + (4 * s_T / r**3 * SIGMA_R) ** 2)
     resumen.append((r, s_T, ss_T, chi2, em, sem))
-    mp_txt = fmt_sci(s_T, ss_T)[0]
 
     for vi, ii, bi, sbi, b2i, sb2i, u in zip(Vr, Ir, B, sB, B2, sB2, usar_v):
         csv_filas.append(f"{r},{vi:g},{SIGMA_V:g},{ii:g},{SIGMA_I:g},"
@@ -232,7 +231,6 @@ for r, I_r in RADIOS.items():
             .replace("0.01", "0,01").replace(f"{ii:.2f}", f"{ii:.2f}".replace(".", ",")))
     tex_filas.append("\\midrule")
 
-    em_txt, _ = fmt_sci(em, sem)
     texto_err = ("Barras de error (incertidumbre):\n"
                  f"  V: ±{SIGMA_V:g} V (instrumental)\n")
 
@@ -255,9 +253,8 @@ for r, I_r in RADIOS.items():
     ax.set_title(f"Voltaje vs corriente, r = {rcm} cm")
     ax.legend(loc="lower right", fontsize=9)
     caja(ax,
-         (texto_err + f"  I: ±{SIGMA_I:g} A (instrumental)\n"
-          f"m' = {mp_txt} V/T²\n"
-          f"e/m = {em_txt} C/kg").replace(".", ","))
+         (texto_err + f"  I: ±{SIGMA_I:g} A (instrumental)")
+         .replace(".", ","))
     res = Vr - s * (m * Ir + b) ** 2
     s_eff = np.sqrt(SIGMA_V**2 + (2 * s * (m * Ir + b) * m * SIGMA_I) ** 2)
     axr.axhline(0, color="k", lw=1)
@@ -287,10 +284,7 @@ for r, I_r in RADIOS.items():
     ax.set_ylim(0, None)
     ax.set_title(f"Voltaje vs B², r = {rcm} cm")
     ax.legend(loc="lower right", fontsize=9)
-    caja(ax,
-         (texto_err + "  B²: 2B·σ_B (propagada desde B = m I + b)\n"
-          f"m' = {mp_txt} V/T²\n"
-          f"e/m = 2m'/r² = {em_txt} C/kg").replace(".", ","))
+    caja(ax, texto_err.rstrip("\n").replace(".", ","))
     res = Vr - s * B2
     s_eff = np.sqrt(SIGMA_V**2 + (s * sB2) ** 2)
     axr.axhline(0, color="k", lw=1)
